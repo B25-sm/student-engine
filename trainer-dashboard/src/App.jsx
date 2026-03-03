@@ -1,6 +1,9 @@
 import { useState } from "react";
 import axios from "axios";
 
+// ✅ Production API URL from .env
+const API_URL = import.meta.env.VITE_API_URL;
+
 const skills = [
   { key: "technical_communication", label: "Technical Communication" },
   { key: "hr_communication", label: "HR Communication" },
@@ -34,17 +37,25 @@ export default function App() {
   };
 
   const handleSubmit = async () => {
+    if (!studentId) {
+      alert("Please enter Student ID");
+      return;
+    }
+
     try {
+      // ✅ Update student scores
       await axios.put(
-        `http://localhost:5000/students/${studentId}`,
+        `${API_URL}/students/${studentId}`,
         formData
       );
 
+      // ✅ Run evaluation
       const result = await axios.post(
-        `http://localhost:5000/evaluate/${studentId}`
+        `${API_URL}/evaluate/${studentId}`
       );
 
       setResponse(result.data);
+
     } catch (error) {
       console.error(error);
       alert("Error submitting evaluation");
