@@ -31,9 +31,13 @@ export default function App() {
   const [studentId, setStudentId] = useState("");
   const [formData, setFormData] = useState({});
   const [response, setResponse] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (key, value) => {
-    setFormData({ ...formData, [key]: Number(value) });
+    setFormData((prev) => ({
+      ...prev,
+      [key]: Number(value)
+    }));
   };
 
   const handleSubmit = async () => {
@@ -42,7 +46,14 @@ export default function App() {
       return;
     }
 
+    if (Object.keys(formData).length !== skills.length) {
+      alert("Please select ALL performance levels before submitting.");
+      return;
+    }
+
     try {
+      setLoading(true);
+
       // ✅ Update student scores
       await axios.put(
         `${API_URL}/students/${studentId}`,
@@ -57,8 +68,13 @@ export default function App() {
       setResponse(result.data);
 
     } catch (error) {
-      console.error(error);
-      alert("Error submitting evaluation");
+      console.error("Server Error:", error.response?.data || error.message);
+      alert(
+        error.response?.data?.error ||
+        "Error submitting evaluation"
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -95,17 +111,21 @@ export default function App() {
         </div>
       ))}
 
-      <button onClick={handleSubmit} style={{ marginTop: 20 }}>
-        Submit Evaluation
+      <button
+        onClick={handleSubmit}
+        style={{ marginTop: 20 }}
+        disabled={loading}
+      >
+        {loading ? "Submitting..." : "Submit Evaluation"}
       </button>
 
       {response && (
         <div style={{ marginTop: 30 }}>
           <h2>Evaluation Result</h2>
-          <p>Readiness Score: {response.readinessScore}</p>
-          <p>Risk Score: {response.riskScore}</p>
-          <p>Opportunity Probability: {response.opportunityProbability}</p>
-          <p>AI Reason: {response.aiReason}</p>
+          <p><strong>Readiness Score:</strong> {response.readinessScore}</p>
+          <p><strong>Risk Score:</strong> {response.riskScore}</p>
+          <p><strong>Opportunity Probability:</strong> {response.opportunityProbability}</p>
+          <p><strong>AI Reason:</strong> {response.aiReason}</p>
         </div>
       )}
     </div>
