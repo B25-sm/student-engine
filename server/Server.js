@@ -5,7 +5,9 @@ const cors = require("cors");
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: "https://student-engine-three.vercel.app"
+}));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
