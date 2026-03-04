@@ -39,21 +39,29 @@ app.get("/students", async (req, res) => {
 });
 
 
-// ================= STUDENTS NEEDING OPPORTUNITIES (NEW) =================
+// ================= STUDENTS NEEDING OPPORTUNITIES =================
 app.get("/students/needs-opportunity", async (req, res) => {
   try {
 
     const result = await pool.query(`
-      SELECT s.id,
-             s.name,
-             e.readiness_score,
-             e.opportunity_probability
+      SELECT 
+        s.id,
+        s.name,
+        ss.readiness_score,
+        ss.opportunity_probability
       FROM students s
-      JOIN evaluations e ON s.id = e.student_id
-      LEFT JOIN opportunities o ON s.id = o.student_id
-      WHERE e.readiness_score >= 75
+      JOIN student_scores ss 
+        ON s.id = ss.student_id
+      LEFT JOIN opportunities o 
+        ON s.id = o.student_id
+      WHERE ss.evaluated_at = (
+        SELECT MAX(evaluated_at)
+        FROM student_scores
+        WHERE student_id = s.id
+      )
+      AND ss.readiness_score >= 75
       AND o.id IS NULL
-      ORDER BY e.readiness_score DESC
+      ORDER BY ss.readiness_score DESC
     `);
 
     res.json(result.rows);
@@ -71,6 +79,7 @@ app.put("/students/:studentId", async (req, res) => {
   const data = req.body;
 
   try {
+
     if (!Object.keys(data).length) {
       return res.status(400).json({ error: "No data provided" });
     }
@@ -84,7 +93,7 @@ app.put("/students/:studentId", async (req, res) => {
 
     await pool.query(
       `UPDATE students 
-       SET ${setQuery}, updated_at = NOW() 
+       SET ${setQuery}, updated_at = NOW()
        WHERE id = $${fields.length + 1}`,
       [...values, studentId]
     );
@@ -100,6 +109,7 @@ app.put("/students/:studentId", async (req, res) => {
 
 // ================= EVALUATE STUDENT =================
 app.post("/evaluate/:studentId", async (req, res) => {
+
   const { studentId } = req.params;
 
   try {
@@ -191,6 +201,7 @@ app.post("/evaluate/:studentId", async (req, res) => {
 
 // ================= READINESS TREND =================
 app.get("/analytics/readiness-trend/:studentId", async (req, res) => {
+
   const { studentId } = req.params;
 
   try {
@@ -243,58 +254,6 @@ app.get("/analytics/readiness-trend/:studentId", async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Trend calculation failed" });
-  }
-});
-
-
-// ================= SMART AUTOMATION ENGINE =================
-app.get("/automation/students-no-opportunity", async (req, res) => {
-  try {
-
-    const result = await pool.query(`
-      SELECT 
-        s.id,
-        s.name,
-        ss.readiness_score,
-        MAX(o.date) AS last_opportunity_date,
-        EXTRACT(DAY FROM (NOW() - MAX(o.date))) AS days_since_last_opportunity,
-        CASE
-          WHEN ss.readiness_score >= 80 THEN 'HIGH'
-          WHEN ss.readiness_score >= 65 THEN 'MEDIUM'
-          ELSE 'LOW'
-        END AS priority
-      FROM students s
-      LEFT JOIN opportunities o ON s.id = o.student_id
-      LEFT JOIN student_scores ss ON s.id = ss.student_id
-      WHERE ss.evaluated_at = (
-        SELECT MAX(evaluated_at)
-        FROM student_scores
-        WHERE student_id = s.id
-      )
-      GROUP BY s.id, s.name, ss.readiness_score, s.last_notified_at
-      HAVING
-        (
-          MAX(o.date) IS NULL
-          OR MAX(o.date) < NOW() - INTERVAL '5 days'
-        )
-        AND (
-          s.last_notified_at IS NULL
-          OR s.last_notified_at < NOW() - INTERVAL '5 days'
-        )
-      ORDER BY 
-        CASE
-          WHEN ss.readiness_score >= 80 THEN 1
-          WHEN ss.readiness_score >= 65 THEN 2
-          ELSE 3
-        END,
-        ss.readiness_score DESC
-    `);
-
-    res.json(result.rows);
-
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: "Automation check failed" });
   }
 });
 
