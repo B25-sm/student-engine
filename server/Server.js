@@ -4,6 +4,7 @@ const { Pool } = require("pg");
 const cors = require("cors");
 
 const app = express();
+
 app.use(express.json());
 app.use(cors({
   origin: "https://student-engine-three.vercel.app"
@@ -14,10 +15,12 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+
 // ================= ROOT =================
 app.get("/", (req, res) => {
   res.send("Student AI Engine Running 🚀");
 });
+
 
 // ================= GET STUDENTS =================
 app.get("/students", async (req, res) => {
@@ -36,7 +39,33 @@ app.get("/students", async (req, res) => {
 });
 
 
-// ================= UPDATE STUDENT SCORES (NEW) =================
+// ================= STUDENTS NEEDING OPPORTUNITIES (NEW) =================
+app.get("/students/needs-opportunity", async (req, res) => {
+  try {
+
+    const result = await pool.query(`
+      SELECT s.id,
+             s.name,
+             e.readiness_score,
+             e.opportunity_probability
+      FROM students s
+      JOIN evaluations e ON s.id = e.student_id
+      LEFT JOIN opportunities o ON s.id = o.student_id
+      WHERE e.readiness_score >= 75
+      AND o.id IS NULL
+      ORDER BY e.readiness_score DESC
+    `);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch students needing opportunity" });
+  }
+});
+
+
+// ================= UPDATE STUDENT SCORES =================
 app.put("/students/:studentId", async (req, res) => {
   const { studentId } = req.params;
   const data = req.body;
@@ -61,6 +90,7 @@ app.put("/students/:studentId", async (req, res) => {
     );
 
     res.json({ message: "Student updated successfully" });
+
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Update failed" });
@@ -68,11 +98,12 @@ app.put("/students/:studentId", async (req, res) => {
 });
 
 
-// ================= EVALUATE =================
+// ================= EVALUATE STUDENT =================
 app.post("/evaluate/:studentId", async (req, res) => {
   const { studentId } = req.params;
 
   try {
+
     const studentResult = await pool.query(
       "SELECT * FROM students WHERE id = $1",
       [studentId]
@@ -116,13 +147,12 @@ app.post("/evaluate/:studentId", async (req, res) => {
       problem_solving: problem,
       creative_thinking: creative,
       intent_to_learn: intent,
-      frontend: frontend,
-      backend: backend
+      frontend,
+      backend
     };
 
-    const weakestSkill = Object.entries(skills).reduce((min, current) =>
-      current[1] < min[1] ? current : min
-    )[0];
+    const weakestSkill = Object.entries(skills)
+      .reduce((min, current) => current[1] < min[1] ? current : min)[0];
 
     const formattedSkill = weakestSkill.replace(/_/g, " ");
 
@@ -130,14 +160,16 @@ app.post("/evaluate/:studentId", async (req, res) => {
 
     if (readinessScore >= 80) {
       aiReason = "Excellent readiness. Strong placement potential.";
-    } else if (readinessScore >= 65) {
+    } 
+    else if (readinessScore >= 65) {
       aiReason = `Moderate readiness. Improve ${formattedSkill}.`;
-    } else {
+    } 
+    else {
       aiReason = `High risk. Immediate improvement needed in ${formattedSkill}.`;
     }
 
     await pool.query(`
-      INSERT INTO student_scores 
+      INSERT INTO student_scores
       (student_id, readiness_score, risk_score, opportunity_probability, ai_reason)
       VALUES ($1, $2, $3, $4, $5)
     `, [studentId, readinessScore, riskScore, opportunityProbability, aiReason]);
@@ -162,8 +194,9 @@ app.get("/analytics/readiness-trend/:studentId", async (req, res) => {
   const { studentId } = req.params;
 
   try {
+
     const result = await pool.query(`
-      SELECT readiness_score
+      SELECT readiness_score, evaluated_at
       FROM student_scores
       WHERE student_id = $1
       ORDER BY evaluated_at DESC
@@ -188,6 +221,7 @@ app.get("/analytics/readiness-trend/:studentId", async (req, res) => {
     let percentageChange = 0;
 
     if (previous > 0) {
+
       percentageChange = ((latest - previous) / previous) * 100;
 
       if (percentageChange > 100) percentageChange = 100;
@@ -216,6 +250,7 @@ app.get("/analytics/readiness-trend/:studentId", async (req, res) => {
 // ================= SMART AUTOMATION ENGINE =================
 app.get("/automation/students-no-opportunity", async (req, res) => {
   try {
+
     const result = await pool.query(`
       SELECT 
         s.id,
@@ -266,9 +301,11 @@ app.get("/automation/students-no-opportunity", async (req, res) => {
 
 // ================= MARK NOTIFIED =================
 app.post("/automation/mark-notified/:studentId", async (req, res) => {
+
   const { studentId } = req.params;
 
   try {
+
     await pool.query(`
       UPDATE students
       SET last_notified_at = NOW()
@@ -284,7 +321,7 @@ app.post("/automation/mark-notified/:studentId", async (req, res) => {
 });
 
 
-// ================= START =================
+// ================= START SERVER =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
