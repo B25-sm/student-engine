@@ -11,24 +11,32 @@ app.use(cors({
 origin: "https://student-engine-three.vercel.app"
 }));
 
+// ================= DATABASE =================
+
 const pool = new Pool({
 connectionString: process.env.DATABASE_URL,
 ssl: { rejectUnauthorized: false }
 });
 
-// ================= ROOT =================
+// ================= HEALTH CHECK =================
+
 app.get("/", (req, res) => {
-res.send("Student AI Engine Running 🚀");
+res.json({
+status: "running",
+service: "Student AI Engine 🚀"
+});
 });
 
 // ================= TRAINERS =================
 
 app.get("/trainers", async (req, res) => {
+
 try {
 
 ```
 const result = await pool.query(`
-  SELECT * FROM trainers
+  SELECT *
+  FROM trainers
   ORDER BY id
 `);
 
@@ -36,22 +44,34 @@ res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch trainers" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch trainers"
+});
+```
+
 }
+
 });
 
 // ================= STUDENTS =================
 
 // Get all students
 app.get("/students", async (req, res) => {
+
 try {
 
 ```
 const result = await pool.query(`
-  SELECT s.*, t.name AS trainer_name
+  SELECT
+    s.*,
+    t.name AS trainer_name
   FROM students s
-  LEFT JOIN trainers t ON s.trainer_id = t.id
+  LEFT JOIN trainers t
+  ON s.trainer_id = t.id
   ORDER BY s.id
 `);
 
@@ -59,13 +79,20 @@ res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Database error" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch students"
+});
+```
+
 }
+
 });
 
 // ================= STUDENTS NEEDING OPPORTUNITY =================
-// IMPORTANT: static route placed BEFORE dynamic routes
 
 app.get("/students/needs-opportunity", async (req, res) => {
 
@@ -73,15 +100,15 @@ try {
 
 ```
 const result = await pool.query(`
-  SELECT 
+  SELECT
     s.name,
     s.batch,
     ss.readiness_score,
     ss.opportunity_probability
   FROM students s
-  JOIN student_scores ss 
+  JOIN student_scores ss
     ON s.id = ss.student_id
-  LEFT JOIN opportunities o 
+  LEFT JOIN opportunities o
     ON s.id = o.student_id
   WHERE ss.evaluated_at = (
     SELECT MAX(evaluated_at)
@@ -97,9 +124,17 @@ res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch students needing opportunity" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch placement-ready students"
+});
+```
+
 }
+
 });
 
 // ================= GET SINGLE STUDENT =================
@@ -111,24 +146,36 @@ const { name, batch } = req.params;
 try {
 
 ```
-const result = await pool.query(
-  `SELECT *
-   FROM students
-   WHERE name = $1 AND batch = $2`,
-  [name, batch]
-);
+const result = await pool.query(`
+  SELECT *
+  FROM students
+  WHERE name = $1
+  AND batch = $2
+`,[name,batch]);
 
-if (!result.rows.length) {
-  return res.status(404).json({ message: "Student not found" });
+if(result.rows.length === 0){
+
+  return res.status(404).json({
+    error:"Student not found"
+  });
+
 }
 
 res.json(result.rows[0]);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch student" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch student"
+});
+```
+
 }
+
 });
 
 // ================= OPPORTUNITIES =================
@@ -140,9 +187,13 @@ try {
 
 ```
 const result = await pool.query(`
-  SELECT o.*, s.name, s.batch
+  SELECT
+    o.*,
+    s.name,
+    s.batch
   FROM opportunities o
-  JOIN students s ON o.student_id = s.id
+  JOIN students s
+  ON o.student_id = s.id
   ORDER BY o.id
 `);
 
@@ -150,9 +201,17 @@ res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch opportunities" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch opportunities"
+});
+```
+
 }
+
 });
 
 // Get opportunities for a student
@@ -166,17 +225,27 @@ try {
 const result = await pool.query(`
   SELECT o.*
   FROM opportunities o
-  JOIN students s ON o.student_id = s.id
-  WHERE s.name = $1 AND s.batch = $2
-`, [name, batch]);
+  JOIN students s
+  ON o.student_id = s.id
+  WHERE s.name = $1
+  AND s.batch = $2
+`,[name,batch]);
 
 res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch opportunities" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch opportunities"
+});
+```
+
 }
+
 });
 
 // Assign opportunity
@@ -187,30 +256,45 @@ const { name, batch, company, role } = req.body;
 try {
 
 ```
-const student = await pool.query(
-  `SELECT id FROM students WHERE name=$1 AND batch=$2`,
-  [name, batch]
-);
+const student = await pool.query(`
+  SELECT id
+  FROM students
+  WHERE name=$1
+  AND batch=$2
+`,[name,batch]);
 
-if (!student.rows.length) {
-  return res.status(404).json({ error: "Student not found" });
+if(student.rows.length === 0){
+
+  return res.status(404).json({
+    error:"Student not found"
+  });
+
 }
 
 const studentId = student.rows[0].id;
 
 const result = await pool.query(`
-  INSERT INTO opportunities (student_id, company, role)
+  INSERT INTO opportunities
+  (student_id, company, role)
   VALUES ($1,$2,$3)
   RETURNING *
-`,[studentId, company, role]);
+`,[studentId,company,role]);
 
 res.json(result.rows[0]);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to create opportunity" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to assign opportunity"
+});
+```
+
 }
+
 });
 
 // ================= STUDENT SCORES =================
@@ -222,9 +306,13 @@ try {
 
 ```
 const result = await pool.query(`
-  SELECT ss.*, s.name, s.batch
+  SELECT
+    ss.*,
+    s.name,
+    s.batch
   FROM student_scores ss
-  JOIN students s ON ss.student_id = s.id
+  JOIN students s
+  ON ss.student_id = s.id
   ORDER BY ss.evaluated_at DESC
 `);
 
@@ -232,9 +320,17 @@ res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch scores" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch scores"
+});
+```
+
 }
+
 });
 
 // Get scores for student
@@ -248,31 +344,46 @@ try {
 const result = await pool.query(`
   SELECT ss.*
   FROM student_scores ss
-  JOIN students s ON ss.student_id = s.id
-  WHERE s.name = $1 AND s.batch = $2
+  JOIN students s
+  ON ss.student_id = s.id
+  WHERE s.name = $1
+  AND s.batch = $2
   ORDER BY ss.evaluated_at DESC
-`, [name, batch]);
+`,[name,batch]);
 
 res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch scores" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch scores"
+});
+```
+
 }
+
 });
 
 // ================= EVALUATIONS =================
 
+// Get all evaluations
 app.get("/evaluations", async (req, res) => {
 
 try {
 
 ```
 const result = await pool.query(`
-  SELECT e.*, s.name, s.batch
+  SELECT
+    e.*,
+    s.name,
+    s.batch
   FROM evaluations e
-  JOIN students s ON e.student_id = s.id
+  JOIN students s
+  ON e.student_id = s.id
   ORDER BY e.created_at DESC
 `);
 
@@ -280,9 +391,17 @@ res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch evaluations" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch evaluations"
+});
+```
+
 }
+
 });
 
 // Get evaluations for student
@@ -296,18 +415,28 @@ try {
 const result = await pool.query(`
   SELECT e.*
   FROM evaluations e
-  JOIN students s ON e.student_id = s.id
-  WHERE s.name = $1 AND s.batch = $2
+  JOIN students s
+  ON e.student_id = s.id
+  WHERE s.name = $1
+  AND s.batch = $2
   ORDER BY e.created_at DESC
-`, [name, batch]);
+`,[name,batch]);
 
 res.json(result.rows);
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to fetch evaluations" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error: "Failed to fetch evaluations"
+});
+```
+
 }
+
 });
 
 // ================= AUTOMATION =================
@@ -322,16 +451,27 @@ try {
 await pool.query(`
   UPDATE students
   SET last_notified_at = NOW()
-  WHERE name=$1 AND batch=$2
-`, [name, batch]);
+  WHERE name=$1
+  AND batch=$2
+`,[name,batch]);
 
-res.json({ message: "Notification timestamp updated" });
+res.json({
+  message:"Notification timestamp updated"
+});
 ```
 
 } catch (error) {
-console.error(error.message);
-res.status(500).json({ error: "Failed to update notification" });
+
+```
+console.error(error);
+
+res.status(500).json({
+  error:"Failed to update notification"
+});
+```
+
 }
+
 });
 
 // ================= START SERVER =================
@@ -339,5 +479,7 @@ res.status(500).json({ error: "Failed to update notification" });
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
+
 console.log("Server running on port " + PORT);
+
 });
