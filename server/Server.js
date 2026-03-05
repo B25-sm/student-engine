@@ -6,9 +6,11 @@ const cors = require("cors");
 const app = express();
 
 app.use(express.json());
+
 app.use(cors({
   origin: "https://student-engine-three.vercel.app"
 }));
+
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -22,16 +24,20 @@ app.get("/", (req, res) => {
 });
 
 
-// ================= GET STUDENTS =================
+// ================= STUDENTS =================
+
+// Get all students
 app.get("/students", async (req, res) => {
   try {
+
     const result = await pool.query(`
       SELECT s.*, t.name AS trainer_name
       FROM students s
-      JOIN trainers t ON s.trainer_id = t.id
+      LEFT JOIN trainers t ON s.trainer_id = t.id
     `);
 
     res.json(result.rows);
+
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: "Database error" });
@@ -39,14 +45,230 @@ app.get("/students", async (req, res) => {
 });
 
 
-// ================= STUDENTS NEEDING OPPORTUNITIES =================
+// Get single student by name + batch
+app.get("/students/:name/:batch", async (req, res) => {
+
+  const { name, batch } = req.params;
+
+  try {
+
+    const result = await pool.query(
+      `SELECT * FROM students
+       WHERE name = $1 AND batch = $2`,
+      [name, batch]
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch student" });
+  }
+});
+
+
+// ================= TRAINERS =================
+
+app.get("/trainers", async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT * FROM trainers
+      ORDER BY id
+    `);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch trainers" });
+  }
+});
+
+
+// ================= OPPORTUNITIES =================
+
+// Get all opportunities
+app.get("/opportunities", async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT o.*, s.name, s.batch
+      FROM opportunities o
+      JOIN students s ON o.student_id = s.id
+      ORDER BY o.id
+    `);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch opportunities" });
+  }
+});
+
+
+// Get opportunities by student name + batch
+app.get("/students/:name/:batch/opportunities", async (req, res) => {
+
+  const { name, batch } = req.params;
+
+  try {
+
+    const result = await pool.query(`
+      SELECT o.*
+      FROM opportunities o
+      JOIN students s ON o.student_id = s.id
+      WHERE s.name = $1 AND s.batch = $2
+    `, [name, batch]);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch opportunities" });
+  }
+});
+
+
+// Assign opportunity using name + batch
+app.post("/opportunities", async (req, res) => {
+
+  const { name, batch, company, role } = req.body;
+
+  try {
+
+    const student = await pool.query(
+      `SELECT id FROM students WHERE name=$1 AND batch=$2`,
+      [name, batch]
+    );
+
+    if (!student.rows.length) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    const studentId = student.rows[0].id;
+
+    const result = await pool.query(`
+      INSERT INTO opportunities (student_id, company, role)
+      VALUES ($1,$2,$3)
+      RETURNING *
+    `,[studentId, company, role]);
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to create opportunity" });
+  }
+});
+
+
+// ================= STUDENT SCORES =================
+
+// Get all scores
+app.get("/scores", async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT ss.*, s.name, s.batch
+      FROM student_scores ss
+      JOIN students s ON ss.student_id = s.id
+      ORDER BY ss.evaluated_at DESC
+    `);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch scores" });
+  }
+});
+
+
+// Get scores by name + batch
+app.get("/students/:name/:batch/scores", async (req, res) => {
+
+  const { name, batch } = req.params;
+
+  try {
+
+    const result = await pool.query(`
+      SELECT ss.*
+      FROM student_scores ss
+      JOIN students s ON ss.student_id = s.id
+      WHERE s.name = $1 AND s.batch = $2
+      ORDER BY ss.evaluated_at DESC
+    `, [name, batch]);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch scores" });
+  }
+});
+
+
+// ================= EVALUATIONS =================
+
+app.get("/evaluations", async (req, res) => {
+
+  try {
+
+    const result = await pool.query(`
+      SELECT e.*, s.name, s.batch
+      FROM evaluations e
+      JOIN students s ON e.student_id = s.id
+      ORDER BY e.created_at DESC
+    `);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch evaluations" });
+  }
+});
+
+
+// Get evaluations by name + batch
+app.get("/students/:name/:batch/evaluations", async (req, res) => {
+
+  const { name, batch } = req.params;
+
+  try {
+
+    const result = await pool.query(`
+      SELECT e.*
+      FROM evaluations e
+      JOIN students s ON e.student_id = s.id
+      WHERE s.name = $1 AND s.batch = $2
+      ORDER BY e.created_at DESC
+    `, [name, batch]);
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Failed to fetch evaluations" });
+  }
+});
+
+
+// ================= STUDENTS NEEDING OPPORTUNITY =================
+
 app.get("/students/needs-opportunity", async (req, res) => {
+
   try {
 
     const result = await pool.query(`
       SELECT 
-        s.id,
         s.name,
+        s.batch,
         ss.readiness_score,
         ss.opportunity_probability
       FROM students s
@@ -73,203 +295,19 @@ app.get("/students/needs-opportunity", async (req, res) => {
 });
 
 
-// ================= UPDATE STUDENT SCORES =================
-app.put("/students/:studentId", async (req, res) => {
-  const { studentId } = req.params;
-  const data = req.body;
+// ================= AUTOMATION =================
 
-  try {
+app.post("/automation/mark-notified/:name/:batch", async (req, res) => {
 
-    if (!Object.keys(data).length) {
-      return res.status(400).json({ error: "No data provided" });
-    }
-
-    const fields = Object.keys(data);
-    const values = Object.values(data);
-
-    const setQuery = fields
-      .map((field, index) => `${field} = $${index + 1}`)
-      .join(", ");
-
-    await pool.query(
-      `UPDATE students 
-       SET ${setQuery}, updated_at = NOW()
-       WHERE id = $${fields.length + 1}`,
-      [...values, studentId]
-    );
-
-    res.json({ message: "Student updated successfully" });
-
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: "Update failed" });
-  }
-});
-
-
-// ================= EVALUATE STUDENT =================
-app.post("/evaluate/:studentId", async (req, res) => {
-
-  const { studentId } = req.params;
-
-  try {
-
-    const studentResult = await pool.query(
-      "SELECT * FROM students WHERE id = $1",
-      [studentId]
-    );
-
-    if (!studentResult.rows.length) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    const s = studentResult.rows[0];
-
-    const technical = Number(s.technical_communication) || 0;
-    const hr = Number(s.hr_communication) || 0;
-    const problem = Number(s.problem_solving) || 0;
-    const creative = Number(s.creative_thinking) || 0;
-    const intent = Number(s.intent_to_learn) || 0;
-    const frontend = Number(s.frontend) || 0;
-    const backend = Number(s.backend) || 0;
-    const projects = Number(s.projects_done) || 0;
-
-    const readinessScore = Math.floor(
-      technical * 0.15 +
-      hr * 0.15 +
-      problem * 0.15 +
-      creative * 0.05 +
-      intent * 0.05 +
-      frontend * 0.15 +
-      backend * 0.15 +
-      (projects * 5) * 0.15
-    );
-
-    const riskScore = 100 - readinessScore;
-
-    const opportunityProbability = Math.floor(
-      (frontend + backend + problem + readinessScore) / 4
-    );
-
-    const skills = {
-      technical_communication: technical,
-      hr_communication: hr,
-      problem_solving: problem,
-      creative_thinking: creative,
-      intent_to_learn: intent,
-      frontend,
-      backend
-    };
-
-    const weakestSkill = Object.entries(skills)
-      .reduce((min, current) => current[1] < min[1] ? current : min)[0];
-
-    const formattedSkill = weakestSkill.replace(/_/g, " ");
-
-    let aiReason = "";
-
-    if (readinessScore >= 80) {
-      aiReason = "Excellent readiness. Strong placement potential.";
-    } 
-    else if (readinessScore >= 65) {
-      aiReason = `Moderate readiness. Improve ${formattedSkill}.`;
-    } 
-    else {
-      aiReason = `High risk. Immediate improvement needed in ${formattedSkill}.`;
-    }
-
-    await pool.query(`
-      INSERT INTO student_scores
-      (student_id, readiness_score, risk_score, opportunity_probability, ai_reason)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [studentId, readinessScore, riskScore, opportunityProbability, aiReason]);
-
-    res.json({
-      studentId,
-      readinessScore,
-      riskScore,
-      opportunityProbability,
-      aiReason
-    });
-
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: "Evaluation failed" });
-  }
-});
-
-
-// ================= READINESS TREND =================
-app.get("/analytics/readiness-trend/:studentId", async (req, res) => {
-
-  const { studentId } = req.params;
-
-  try {
-
-    const result = await pool.query(`
-      SELECT readiness_score, evaluated_at
-      FROM student_scores
-      WHERE student_id = $1
-      ORDER BY evaluated_at DESC
-      LIMIT 2
-    `, [studentId]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "No evaluations found" });
-    }
-
-    if (result.rows.length === 1) {
-      return res.json({
-        trend: "NEW",
-        message: "Only one evaluation exists"
-      });
-    }
-
-    const latest = result.rows[0].readiness_score;
-    const previous = result.rows[1].readiness_score;
-
-    let trend = "STABLE";
-    let percentageChange = 0;
-
-    if (previous > 0) {
-
-      percentageChange = ((latest - previous) / previous) * 100;
-
-      if (percentageChange > 100) percentageChange = 100;
-      if (percentageChange < -100) percentageChange = -100;
-
-      percentageChange = percentageChange.toFixed(2);
-
-      if (latest > previous) trend = "IMPROVING";
-      else if (latest < previous) trend = "DECLINING";
-    }
-
-    res.json({
-      latestScore: latest,
-      previousScore: previous,
-      trend,
-      percentageChange: Number(percentageChange)
-    });
-
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: "Trend calculation failed" });
-  }
-});
-
-
-// ================= MARK NOTIFIED =================
-app.post("/automation/mark-notified/:studentId", async (req, res) => {
-
-  const { studentId } = req.params;
+  const { name, batch } = req.params;
 
   try {
 
     await pool.query(`
       UPDATE students
       SET last_notified_at = NOW()
-      WHERE id = $1
-    `, [studentId]);
+      WHERE name=$1 AND batch=$2
+    `, [name, batch]);
 
     res.json({ message: "Notification timestamp updated" });
 
@@ -281,6 +319,7 @@ app.post("/automation/mark-notified/:studentId", async (req, res) => {
 
 
 // ================= START SERVER =================
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
